@@ -19,27 +19,21 @@ import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.IOException;
 import java.lang.ref.WeakReference;
 
 public class MainActivity extends AppCompatActivity{
-
-
     private static final String TAG = MainActivity.class.getSimpleName();
-    private static final int MY_PERMISSIONS_REQUEST_READ_EXT_STORAGE = 101;
-    public static MediaPlayerService mediaPlayerService;
-    private AccelerationService accelerationService;
+    private MediaPlayerService mediaPlayerService;
     private TextView songInfo, songDuration;
-    Intent intent, intent2;
-    boolean mserviceBound, aserviceBound;
-    private boolean flag = false;
+    Intent intent;
+    boolean mserviceBound;
 
     private final Handler mUpdateTimeHandler = new UIUpdateHandler(this);
-    private final Handler mUpdateGestureHandler = new GESTUREUpdateHandler(this);
     private final static int MSG_UPDATE_TIME = 0;
-    private final static int MSG_UPDATE_GESTURE = 0;
     public static Activity context;
-    private boolean isGestureOn = false;
 
+    //make media player service connection
     private ServiceConnection mConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
@@ -54,33 +48,13 @@ public class MainActivity extends AppCompatActivity{
                 songInfo.setText(mediaPlayerService.getSongInfo());
             }
             mediaPlayerService.foreground();
+            mUpdateTimeHandler.sendEmptyMessage(MSG_UPDATE_TIME);
         }
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
             Log.d(TAG, "Service Disconnected");
             mserviceBound = false;
-        }
-    };
-
-    private ServiceConnection aConnection = new ServiceConnection() {
-        @Override
-        public void onServiceConnected(ComponentName name, IBinder service) {
-            Log.d(TAG, "Acceleration Service Bound");
-
-            AccelerationService.RunServiceBinder binder = (AccelerationService.RunServiceBinder) service;
-            accelerationService = binder.getService();
-            aserviceBound = true;
-
-//            if(accelerationService.isGestureOn()){
-//                mUpdateGestureHandler.sendEmptyMessage(MSG_UPDATE_GESTURE);
-//            }
-        }
-
-        @Override
-        public void onServiceDisconnected(ComponentName name) {
-            Log.d(TAG, "Service Disconnected");
-            aserviceBound = false;
         }
     };
 
@@ -91,15 +65,12 @@ public class MainActivity extends AppCompatActivity{
 
         System.out.println("onCreate");
 
-        songDuration = findViewById(R.id.songDuration);
-        songInfo = findViewById(R.id.songInfo);
+        songDuration = findViewById(R.id.songDuration); //text view that indicates songDuration
+        songInfo = findViewById(R.id.songInfo); //text view that indicates songInformation
         context = MainActivity.this;
 
         intent = new Intent(getApplicationContext(), MediaPlayerService.class);
-        intent2 = new Intent(getApplicationContext(), AccelerationService.class);
-
-        startService(intent);
-        startService(intent2);
+        startService(intent); //start media player service
     }
 
     @Override
@@ -109,131 +80,81 @@ public class MainActivity extends AppCompatActivity{
         Log.d(TAG, "Starting and binding service");
 
         intent.setAction(MediaPlayerService.ACTION_START);
-        bindService(intent, mConnection, 0);
+        bindService(intent, mConnection, 0); //bind media player service
 
-        intent2.setAction(AccelerationService.ACTION_START);
-        bindService(intent2, aConnection, 0);
     }
 
     @Override
     protected void onStop(){
         super.onStop();
-        //mUpdateTimeHandler.removeMessages(MSG_UPDATE_TIME);
+        mUpdateTimeHandler.removeMessages(MSG_UPDATE_TIME);
 
         if(mserviceBound){
             unbindService(mConnection);
             mserviceBound = false;
 
             mediaPlayerService.foreground();
+        } //unbind media player service
 
-        }
 
-        if(aserviceBound){
-            unbindService(aConnection);
-            aserviceBound = false;
-        }
     }
 
     @Override
     protected void onDestroy() {
         Log.e(TAG,"MainActivity onDestroy");
-        stopService(new Intent(this,MediaPlayerService.class));
-        stopService(new Intent(this, AccelerationService.class));
+        stopService(new Intent(this,MediaPlayerService.class)); //when main activity destroyed, stop media player service
         super.onDestroy();
     }
 
-    public void playBtnClick(View v){
-        System.out.println("play button clicked");
-        if(requestReadExternalStoragePermission() == true)
-        {
-//            if(flag == false){
-//                mediaPlayerService.getMusicData();
-//                flag = true;
-//            }
-            mediaPlayerService.playMusic();
-            //songInfo.setText(mediaPlayerService.getSongInfo());
-            mUpdateTimeHandler.sendEmptyMessage(MSG_UPDATE_TIME);
-        }
+    public void playBtnClick(View v) {
+        //play button clicked
+        mediaPlayerService.playMusic();
     }
 
     public void pauseBtnClick(View v){
-        System.out.println("pause button clicked");
+        //pause button clicked
         mediaPlayerService.pauseMusic();
     }
 
     public void stopBtnClick(View v){
-        System.out.println("stop button clicked");
+        //stop button clicked
         mediaPlayerService.stopMusic();
-        songInfo.setText("(Song Info)");
-        songDuration.setText("(Duration)");
-        mUpdateTimeHandler.removeMessages(MSG_UPDATE_TIME);
     }
 
     public void exitBtnClick(View v){
-        System.out.println("exit button clicked");
+        //exit button clicked
         finish();
     }
 
     public void gonBtnClick(View v){
+        //gestureOn button clicked
+        mediaPlayerService.gestureON();
+        Toast.makeText(this, "Gesture activated", Toast.LENGTH_SHORT).show();
 
-        Toast.makeText(this, "Gesture ON", Toast.LENGTH_SHORT).show();
-        isGestureOn = true;
-        mUpdateGestureHandler.sendEmptyMessage(MSG_UPDATE_GESTURE);
-        //startService(intent2);
     }
 
     public void goffBtnClick(View v){
-
-        Toast.makeText(this, "Gesture OFF", Toast.LENGTH_SHORT).show();
-        isGestureOn = false;
-        mUpdateGestureHandler.removeMessages(MSG_UPDATE_GESTURE);
-        //stopService(intent2);
+        //gestureOff button clicked
+        mediaPlayerService.gestureOFF();
+        Toast.makeText(this, "Gesture deactivated", Toast.LENGTH_SHORT).show();
     }
 
     private void updateUIDuration(){
+        // if mediaPlayerService is stopped, set songInfo and songDuration default.
+        // else update songInfo and songDuration
         if(mediaPlayerService.getSongInfo() == null)
             songInfo.setText("(Song Info)");
         else
             songInfo.setText(mediaPlayerService.getSongInfo());
 
-        if(mediaPlayerService.getDuration() == null)
+        if(mediaPlayerService.getDuration() ==  null)
             songDuration.setText("(Song Duration)");
         else
             songDuration.setText(mediaPlayerService.getDuration());
     }
 
-    private void controlGesture(){
-        System.out.println("Control Gesture: " + accelerationService.getCommand());
-        System.out.println(isGestureOn);
-        if(!isGestureOn)
-        {
-            System.out.println("Gesture OFF");
-        }
-        else{
-            if(accelerationService.getCommand() == accelerationService.HORIZONTAL)
-            {
-                System.out.println("HORIZONTAL pause music");
-                mediaPlayerService.pauseMusic();
-            }
-            else if(accelerationService.getCommand() == accelerationService.VERTICAL)
-            {
-                System.out.println("VERTICAL play music");
-                if(flag == false){
-                    mediaPlayerService.getMusicData();
-                    flag = true;
-                }
-                mediaPlayerService.playMusic();
-                songInfo.setText(mediaPlayerService.getSongInfo());
-                mUpdateTimeHandler.sendEmptyMessage(MSG_UPDATE_TIME);
-            }
-            else{
-                System.out.println("IDLE");
-            }
-        }
-    }
-
     class UIUpdateHandler extends Handler{
-        private final static int UPDATE_RATE_MS = 1000;
+        private final static int UPDATE_RATE_MS = 1000; // update every second
         private final WeakReference<MainActivity> activity;
 
         UIUpdateHandler(MainActivity activity){
@@ -247,74 +168,10 @@ public class MainActivity extends AppCompatActivity{
                 Log.d(TAG, "updating UI");
                 activity.get().updateUIDuration();
 
-                if(MediaPlayerService.foregroundService == true)
-                {
-                    mediaPlayerService.foreground();
-                }
                 sendEmptyMessageDelayed(MSG_UPDATE_TIME, UPDATE_RATE_MS);
             }
         }
     }
-
-    class GESTUREUpdateHandler extends Handler{
-        private final static int UPDATE_RATE_MS = 500;
-        private final WeakReference<MainActivity> activity;
-
-        GESTUREUpdateHandler(MainActivity activity) {
-            this.activity = new WeakReference<>(activity);
-        }
-
-        @Override
-        public void handleMessage(Message message){
-            if(MSG_UPDATE_GESTURE == message.what)
-            {
-                Log.d(TAG, "updating gesture");
-                activity.get().controlGesture();
-
-                sendEmptyMessageDelayed(MSG_UPDATE_GESTURE, UPDATE_RATE_MS);
-            }
-        }
-    }
-
-    private boolean requestReadExternalStoragePermission() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) !=
-                PackageManager.PERMISSION_GRANTED) {
-            System.out.println("permission x");
-            // No explanation needed, we can request the permission.
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE},
-                    MY_PERMISSIONS_REQUEST_READ_EXT_STORAGE);
-
-            return false;
-        }
-        return true;
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String permissions[], int[] grantResults) {
-        switch (requestCode) {
-            case MY_PERMISSIONS_REQUEST_READ_EXT_STORAGE : {
-                // If request is cancelled, the result arrays are empty.
-                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    // permission was granted, yay! Do the
-                    // contacts-related task you need to do.
-                    System.out.println("permission granted");
-                    mediaPlayerService.getMusicData();
-                    mediaPlayerService.randomPlay();
-                    songInfo.setText(mediaPlayerService.getSongInfo());
-                } else {
-                    System.out.println("permission denied");
-                    Toast.makeText(this, "Permission Denied", Toast.LENGTH_SHORT).show();
-                    // permission denied, boo! Disable the
-                    // functionality that depends on this permission.
-                }
-                return;
-            }
-
-            // other 'case' lines to check for other
-            // permissions this app might request
-        }
-    }
-
 }
 
 

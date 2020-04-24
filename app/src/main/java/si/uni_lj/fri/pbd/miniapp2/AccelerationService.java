@@ -12,6 +12,8 @@ import android.util.Log;
 
 import androidx.annotation.Nullable;
 
+import java.util.Arrays;
+
 import static android.content.ContentValues.TAG;
 
 public class AccelerationService extends Service implements SensorEventListener {
@@ -27,6 +29,7 @@ public class AccelerationService extends Service implements SensorEventListener 
     public static final String VERTICAL = "vertical";
     private String Command = IDLE;
     private IBinder serviceBinder = new AccelerationService.RunServiceBinder();
+    private MediaPlayerService mediaPlayerService = new MediaPlayerService();
 
     float Xt=0, Yt=0, Zt=0;
     @Nullable
@@ -34,7 +37,6 @@ public class AccelerationService extends Service implements SensorEventListener 
     public IBinder onBind(Intent intent) {
         Log.d(TAG, "Binding service");
         return serviceBinder;
-        //return null;
     }
 
     @Override
@@ -55,12 +57,13 @@ public class AccelerationService extends Service implements SensorEventListener 
         mAccelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         sensorManager.registerListener(this, mAccelerometer, SensorManager.SENSOR_DELAY_UI);
         //Command = IDLE;
+        super.onCreate();
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
-        Log.d(TAG, "Destroying service");
+        Log.d(TAG, "Destroying acceleration service");
     }
 
     @Override
@@ -94,7 +97,6 @@ public class AccelerationService extends Service implements SensorEventListener 
                 Command = IDLE;
             }
 
-            //System.out.println("in service command: " + Command);
             Xt = mGravity[0];
             Yt = mGravity[1];
             Zt = mGravity[2];

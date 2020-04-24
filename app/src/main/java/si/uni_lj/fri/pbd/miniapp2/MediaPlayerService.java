@@ -1,14 +1,16 @@
 package si.uni_lj.fri.pbd.miniapp2;
 
+import android.app.Activity;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.ComponentName;
 import android.content.ContentResolver;
-import android.content.ContentUris;
 import android.content.Context;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.media.MediaPlayer;
@@ -23,7 +25,6 @@ import android.util.Log;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
-import androidx.core.app.NotificationManagerCompat;
 
 import java.io.IOException;
 import java.lang.ref.WeakReference;
@@ -46,10 +47,10 @@ public class MediaPlayerService extends Service {
 
     private boolean isMusicPlaying;
     private boolean isMusicPausing;
-    private ArrayList<MusicData> musicList = new ArrayList<>();
-    private MediaPlayer mediaPlayer = new MediaPlayer();
+    private MediaPlayer mediaPlayer;
     private IBinder serviceBinder = new RunServiceBinder();
-
+    int resMp3[] = {R.raw.a, R.raw.b, R.raw.c};
+    String songInfo[] = {"Calvin Harris - Slide", "Ed Sheeran - South of the Border (feat.Camila Cabello, Cardi B)", "Ellie Goulding - Love me like you do"};
     private int randomPos;
     private long startTime, endTime;
     private String songInformation;
@@ -57,7 +58,12 @@ public class MediaPlayerService extends Service {
     public static int NOTIFICATION_ID = 100;
     public NotificationCompat.Builder builder;
     public static boolean foregroundService = false;
-    //private final Handler mUpdateTimeHandler = new MainActivity.UIUpdateHandler(this);
+    private AccelerationService accelerationService;
+    private final Handler mUpdateGestureHandler = new MediaPlayerService.GESTUREUpdateHandler(this);
+    private final static int MSG_UPDATE_GESTURE = 0;
+    private boolean isGestureOn = false;
+    boolean aserviceBound;
+    Intent intent;
 
     @Override
     public void onCreate(){
@@ -68,9 +74,32 @@ public class MediaPlayerService extends Service {
         endTime = 0;
         isMusicPlaying = false;
 
+        intent = new Intent(getApplicationContext(), AccelerationService.class);
+        startService(intent); //start acceleration player service
+
+        intent.setAction(AccelerationService.ACTION_START);
+        bindService(intent, aConnection, 0);
+
         createNotificationChannel();
     }
 
+    //make acceleration service connection
+    private ServiceConnection aConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            Log.d(TAG, "Acceleration Service Bound");
+
+            AccelerationService.RunServiceBinder binder = (AccelerationService.RunServiceBinder) service;
+            accelerationService = binder.getService();
+            aserviceBound = true;
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            Log.d(TAG, "Service Disconnected");
+            aserviceBound = false;
+        }
+    };
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.d(TAG, "Starting service");
@@ -109,82 +138,49 @@ public class MediaPlayerService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        Log.d(TAG, "Destroying service");
+        Log.d(TAG, "Destroying media player service");
+
+        if(isMusicPlaying())
+            stopMusic();
+
+        stopService(new Intent(this, AccelerationService.class));
+        if(aserviceBound){
+            unbindService(aConnection);
+            aserviceBound = false;
+        }
     }
 
-    public boolean isMusicPlaying(){
+    public boolean isMusicPlaying() {
         return isMusicPlaying;
     }
 
-    public boolean isMusicPausing(){
+    public boolean isMusicPausing() {
         return isMusicPausing;
     }
-    public void getMusicData() {
-        ContentResolver contentResolver = getContentResolver();
-        // 음악 앱의 데이터베이스에 접근해서 mp3 정보들을 가져온다.
 
-        Uri uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
-        String selection = MediaStore.Audio.Media.IS_MUSIC + "!= 0";
-        String sortOrder = MediaStore.Audio.Media.TITLE + " ASC";
-        Cursor cursor = contentResolver.query(uri, null, selection, null, sortOrder);
-        cursor.moveToFirst();
-        System.out.println("음악파일 개수 = " + cursor.getCount());
-        if (cursor != null && cursor.getCount() > 0) {
-            do {
-                long track_id = cursor.getLong(cursor.getColumnIndex(MediaStore.Audio.Media._ID));
-                long albumId = cursor.getLong(cursor.getColumnIndex(MediaStore.Audio.Media.ALBUM_ID));
-                String title = cursor.getString(cursor.getColumnIndex(MediaStore.Audio.Media.TITLE));
-                String album = cursor.getString(cursor.getColumnIndex(MediaStore.Audio.Media.ALBUM));
-                String artist = cursor.getString(cursor.getColumnIndex(MediaStore.Audio.Media.ARTIST));
-                Integer mDuration = cursor.getInt(cursor.getColumnIndex(MediaStore.Audio.Media.DURATION));
-                String datapath = cursor.getString(cursor.getColumnIndex(MediaStore.Audio.Media.DATA));
-                System.out.println("mId = " + track_id + " albumId = " + albumId + " title : " + title + " album : " + album + " artist: " + artist + " totalDuration : " + mDuration + " data : " + datapath);
-                // Save to audioList
-                MusicData musicData = new MusicData(track_id, albumId, title, artist, album, mDuration, datapath, false);
-                musicList.add(musicData);
-
-            } while (cursor.moveToNext());
-        }
-        cursor.close();
-    }
-
-    public void randomPlay(){
-        Random ran = new Random();
-        randomPos = ran.nextInt(musicList.size());
-        MusicData item = musicList.get(randomPos);
-
-        try {
-            songInformation = item.getTitle() + " - " + item.getArtist();
-            mediaPlayer.reset();
-            mediaPlayer.setDataSource(item.getDataPath());
-            mediaPlayer.prepare();
-            mediaPlayer.start(); // 노래 재생 시작
-        } catch (IOException e) {
-            e.getMessage();
-        }
-
-        System.out.println("randomPos: " + randomPos);
-    }
-
-    public String getSongInfo(){
-        if(!isMusicPlaying() && !isMusicPausing())
-        {
+    public String getSongInfo() {
+        if (!isMusicPlaying() && !isMusicPausing()) {
             return null;
         }
         return songInformation;
     }
 
     public String getDuration(){
-        if(!isMusicPlaying() && !isMusicPausing())
-        {
+        if(!isMusicPlaying() && !isMusicPausing()) {
             return null;
         }
-        int total = mediaPlayer.getDuration()/1000;
-        int total_h = total/3600;
-        int total_m = (total%3600)/60;
-        int total_s = (total%3600)%60;
+        if (mediaPlayer.getDuration() == mediaPlayer.getCurrentPosition()) {
+            return null;
+        }
 
-        int current = mediaPlayer.getCurrentPosition()/1000;
+        int total = mediaPlayer.getDuration() / 1000;
+        int current = mediaPlayer.getCurrentPosition() / 1000;
+
+        int total_h = total / 3600;
+        int total_m = (total % 3600) / 60;
+        int total_s = (total % 3600) % 60;
+
+
         int current_h = current/3600;
         int current_m = (current%3600)/60;
         int current_s = (current%3600)%60;
@@ -197,18 +193,15 @@ public class MediaPlayerService extends Service {
 
     public void playMusic() {
         if (!isMusicPlaying && !isMusicPausing) {
-            if(musicList.isEmpty())
-            {
-                getMusicData();
-                System.out.println("music list is empty");
-            }
-
             startTime = System.currentTimeMillis();
             isMusicPlaying = true;
-            for(int i = 0; i<musicList.size();i++){
-                System.out.println(musicList.get(i));
-            }
-            randomPlay();
+            Random ran = new Random();
+            randomPos = ran.nextInt(resMp3.length);
+
+            mediaPlayer = MediaPlayer.create(MediaPlayerService.this, resMp3[randomPos]);
+            songInformation = songInfo[randomPos];
+            mediaPlayer.start();
+
         } else if (isMusicPausing) {
             isMusicPausing = false;
             isMusicPlaying = true;
@@ -253,6 +246,16 @@ public class MediaPlayerService extends Service {
 
     public void exitMusic(){
         MainActivity.context.finish();
+    }
+
+    public void gestureON(){
+        isGestureOn = true;
+        mUpdateGestureHandler.sendEmptyMessage(MSG_UPDATE_GESTURE);
+    }
+
+    public void gestureOFF(){
+        isGestureOn = false;
+        mUpdateGestureHandler.removeMessages(MSG_UPDATE_GESTURE);
     }
 
     private Notification createNotification() {
@@ -329,4 +332,47 @@ public class MediaPlayerService extends Service {
         }
     }
 
+    private void controlGesture(){
+        System.out.println("Control Gesture: " + accelerationService.getCommand());
+        System.out.println(isGestureOn);
+        if(!isGestureOn)
+        {
+            System.out.println("Gesture OFF");
+        }
+        else{
+            if(accelerationService.getCommand() == accelerationService.HORIZONTAL)
+            {
+                System.out.println("HORIZONTAL pause music");
+                pauseMusic();
+            }
+            else if(accelerationService.getCommand() == accelerationService.VERTICAL)
+            {
+                System.out.println("VERTICAL play music");
+                playMusic();
+            }
+            else{
+                System.out.println("IDLE");
+            }
+        }
+    }
+
+    class GESTUREUpdateHandler extends Handler{
+        private final static int UPDATE_RATE_MS = 500;
+        private final WeakReference<MediaPlayerService> activity;
+
+        GESTUREUpdateHandler(MediaPlayerService activity) {
+            this.activity = new WeakReference<>(activity);
+        }
+
+        @Override
+        public void handleMessage(Message message){
+            if(MSG_UPDATE_GESTURE == message.what)
+            {
+                Log.d(TAG, "updating gesture");
+                activity.get().controlGesture();
+
+                sendEmptyMessageDelayed(MSG_UPDATE_GESTURE, UPDATE_RATE_MS);
+            }
+        }
+    }
 }
