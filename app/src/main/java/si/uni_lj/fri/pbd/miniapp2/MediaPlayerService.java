@@ -107,13 +107,13 @@ public class MediaPlayerService extends Service {
         System.out.println("state: " + intent.getAction());
 
         // TODO: check the intent action and if equal to ACTION_STOP, stop the foreground service
-        if(intent.getAction() == ACTION_TOGGLE_PLAY)
+        if(intent.getAction() == ACTION_TOGGLE_PLAY) //in notification, we should implement toggle play
         {
-            if(isMusicPlaying())
+            if(isMusicPlaying()) // if music is playing, we should pause music.
             {
                 pauseMusic();
             }
-            else
+            else // if music is pausing, we should play music
                 playMusic();
         }
         else if(intent.getAction() == ACTION_STOP)
@@ -140,10 +140,12 @@ public class MediaPlayerService extends Service {
         super.onDestroy();
         Log.d(TAG, "Destroying media player service");
 
-        if(isMusicPlaying())
+        if(isMusicPlaying()) //if music is playing, we should stop playing music
             stopMusic();
 
-        stopService(new Intent(this, AccelerationService.class));
+        stopService(new Intent(this, AccelerationService.class)); // stop acceleration service
+
+        //unbind acceleration service
         if(aserviceBound){
             unbindService(aConnection);
             aserviceBound = false;
@@ -159,6 +161,7 @@ public class MediaPlayerService extends Service {
     }
 
     public String getSongInfo() {
+        //get song information
         if (!isMusicPlaying() && !isMusicPausing()) {
             return null;
         }
@@ -166,25 +169,27 @@ public class MediaPlayerService extends Service {
     }
 
     public String getDuration(){
+        //get song duration
         if(!isMusicPlaying() && !isMusicPausing()) {
             return null;
         }
-        if (mediaPlayer.getDuration() == mediaPlayer.getCurrentPosition()) {
-            return null;
-        }
 
+        //convert msec to timestamp
         int total = mediaPlayer.getDuration() / 1000;
-        int current = mediaPlayer.getCurrentPosition() / 1000;
-
         int total_h = total / 3600;
         int total_m = (total % 3600) / 60;
         int total_s = (total % 3600) % 60;
 
-
+        int current = mediaPlayer.getCurrentPosition() / 1000;
         int current_h = current/3600;
         int current_m = (current%3600)/60;
         int current_s = (current%3600)%60;
 
+        if (total_h == current_h && total_m == current_m && total_s == current_s) { // if music ends
+            isMusicPlaying = false;
+            isMusicPausing = false;
+        }
+        
         String totalD = String.format("%02d", total_h) + ":" + String.format("%02d", total_m) + ":" + String.format("%02d", total_s);
         String currentD = String.format("%02d", current_h) + ":" + String.format("%02d", current_m) + ":" + String.format("%02d", current_s);
 
@@ -192,32 +197,28 @@ public class MediaPlayerService extends Service {
     }
 
     public void playMusic() {
-        if (!isMusicPlaying && !isMusicPausing) {
-            startTime = System.currentTimeMillis();
+        if (!isMusicPlaying && !isMusicPausing) { //if playing music newly
             isMusicPlaying = true;
-            Random ran = new Random();
+            Random ran = new Random(); //for random playing
             randomPos = ran.nextInt(resMp3.length);
 
             mediaPlayer = MediaPlayer.create(MediaPlayerService.this, resMp3[randomPos]);
             songInformation = songInfo[randomPos];
-            mediaPlayer.start();
+            mediaPlayer.start(); //start music
 
         } else if (isMusicPausing) {
             isMusicPausing = false;
             isMusicPlaying = true;
-            mediaPlayer.seekTo(pos);
+            mediaPlayer.seekTo(pos); //Play back from the time you paused it
             mediaPlayer.start();
         } else {
             Log.e(TAG, "playMusic request for an already running player");
         }
-
-        if(foregroundService == true)
-            foreground();
     }
 
     public void pauseMusic() {
         if (isMusicPlaying) {
-            pos = mediaPlayer.getCurrentPosition();
+            pos = mediaPlayer.getCurrentPosition(); //remember the time you clicked pause
             mediaPlayer.pause();
             isMusicPlaying = false;
             isMusicPausing = true;
@@ -225,14 +226,10 @@ public class MediaPlayerService extends Service {
         else{
             Log.e(TAG, "pauseMusic request for a player that isn't running");
         }
-
-        if(foregroundService == true)
-            foreground();
     }
 
     public void stopMusic(){
         if(isMusicPlaying || isMusicPausing){
-            endTime = System.currentTimeMillis();
             isMusicPlaying = false;
             isMusicPausing = false;
             mediaPlayer.stop();
@@ -240,27 +237,25 @@ public class MediaPlayerService extends Service {
         else{
             Log.e(TAG, "stopMusic request for a player that isn't running");
         }
-        if(foregroundService == true)
-            foreground();
     }
 
     public void exitMusic(){
-        MainActivity.context.finish();
+        MainActivity.context.finish(); //exit main activity
     }
 
     public void gestureON(){
         isGestureOn = true;
-        mUpdateGestureHandler.sendEmptyMessage(MSG_UPDATE_GESTURE);
+        mUpdateGestureHandler.sendEmptyMessage(MSG_UPDATE_GESTURE); //start updateGestureHandler to control gesture
     }
 
     public void gestureOFF(){
         isGestureOn = false;
-        mUpdateGestureHandler.removeMessages(MSG_UPDATE_GESTURE);
+        mUpdateGestureHandler.removeMessages(MSG_UPDATE_GESTURE); //stop updateGestureHandler to stop controlling gesture
     }
 
     private Notification createNotification() {
 
-        // TODO: add code to define a notification action
+        // create notification
 
         builder = new NotificationCompat.Builder(this, channelID)
                 .setContentTitle(getSongInfo())
@@ -271,6 +266,7 @@ public class MediaPlayerService extends Service {
         Intent resultIntent = new Intent(this, MainActivity.class)
                 .setAction(Intent.ACTION_MAIN) .addCategory(Intent.CATEGORY_LAUNCHER) .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
+        // if touch the notification
         PendingIntent resultPendingIntent =
                 PendingIntent.getActivity(this, 0, resultIntent,
                         PendingIntent.FLAG_UPDATE_CURRENT);

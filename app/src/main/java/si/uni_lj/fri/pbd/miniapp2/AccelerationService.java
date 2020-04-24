@@ -69,19 +69,18 @@ public class AccelerationService extends Service implements SensorEventListener 
     @Override
     public void onSensorChanged(SensorEvent event) {
 
-        //System.out.println("onSensorChanged");
         float dX, dY, dZ;
 
         if(event.sensor.getType() == Sensor.TYPE_ACCELEROMETER)
         {
-            mGravity = event.values;
-            //System.out.println(Arrays.toString(mGravity));
+            mGravity = event.values; //get accelerometer sensor values
         }
         if(mGravity != null){
             dX = Math.abs(Xt - mGravity[0]);
             dY = Math.abs(Yt - mGravity[1]);
             dZ = Math.abs(Zt - mGravity[2]);
 
+            //To reduce noise-induced malfunctions
             if(dX<=Noise_threshold)
                 dX = 0;
             if(dY<=Noise_threshold)
@@ -89,9 +88,9 @@ public class AccelerationService extends Service implements SensorEventListener 
             if(dZ <=Noise_threshold)
                 dZ = 0;
 
-            if(dX > dZ)
+            if(dX > dZ) // When the user shakes from side to side
                 Command = HORIZONTAL;
-            else if(dZ > dX)
+            else if(dZ > dX)  // When the user shakes up and down
                 Command = VERTICAL;
             else{
                 Command = IDLE;
