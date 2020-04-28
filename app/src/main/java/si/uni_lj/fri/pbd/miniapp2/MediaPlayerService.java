@@ -189,7 +189,7 @@ public class MediaPlayerService extends Service {
             isMusicPlaying = false;
             isMusicPausing = false;
         }
-        
+
         String totalD = String.format("%02d", total_h) + ":" + String.format("%02d", total_m) + ":" + String.format("%02d", total_s);
         String currentD = String.format("%02d", current_h) + ":" + String.format("%02d", current_m) + ":" + String.format("%02d", current_s);
 
